@@ -194,14 +194,15 @@ impl<'a> Splitter<'a> {
     }
 
     /// Where a `/* … */` comment starting at `i` ends. Postgres nests them.
+    /// Walks bytes, not `str` slices: `j` steps into multibyte characters.
     fn block_comment(&self, i: usize) -> usize {
         let mut depth = 0;
         let mut j = i;
         while j < self.bytes.len() {
-            if self.sql[j..].starts_with("/*") && (depth == 0 || !self.mysql()) {
+            if self.bytes[j..].starts_with(b"/*") && (depth == 0 || !self.mysql()) {
                 depth += 1;
                 j += 2;
-            } else if self.sql[j..].starts_with("*/") {
+            } else if self.bytes[j..].starts_with(b"*/") {
                 depth -= 1;
                 j += 2;
                 if depth == 0 {
@@ -398,6 +399,17 @@ mod tests {
         assert_eq!(
             texts("SELECT 'città'; SELECT ñ", Engine::Postgres),
             ["SELECT 'città'", "SELECT ñ"]
+        );
+        for engine in Engine::ALL {
+            assert_eq!(
+                texts("/* città */ SELECT 1; /* ñ é */ SELECT 2", engine),
+                ["SELECT 1", "SELECT 2"],
+                "{engine:?}"
+            );
+        }
+        assert_eq!(
+            texts("/* ñ /* é */ ü */ SELECT 1", Engine::Postgres),
+            ["SELECT 1"]
         );
     }
 
