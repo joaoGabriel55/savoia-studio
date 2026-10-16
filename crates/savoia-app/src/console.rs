@@ -1,7 +1,8 @@
 //! Query console: toolbar, SQL editor and the output/result panes below it.
 //!
 //! Run sends the selection, else the statement at the caret, to the
-//! console's data source; Run script sends the whole editor. The data
+//! console's data source; Run script sends the whole editor; Format lays
+//! out the statements in the selection, else all of them. The data
 //! source is the one the console was opened on, else the one selected in the explorer
 //! at its first run. A reader task moves the query's events into the grid, pausing
 //! while the grid has enough rows (see [`Pacer`]).
@@ -25,7 +26,7 @@ use gpui_kit::*;
 use std::path::PathBuf;
 
 use savoia_core::export::Format;
-use savoia_core::{AppError, ConnectionId, Engine, QueryEvent, split};
+use savoia_core::{AppError, ConnectionId, Engine, QueryEvent, format, split};
 use savoia_store::HistoryEntry;
 
 use crate::commands::keys_label;
@@ -38,9 +39,13 @@ use crate::session::{self, Session};
 use crate::theme::BandDisabled as _;
 use crate::{runtime, theme};
 
-actions!(console, [RunQuery, RunScript]);
+actions!(console, [RunQuery, RunScript, FormatSql]);
 
 const CONTEXT: &str = "QueryConsole";
+
+/// Ctrl+Shift+F everywhere, as in DBeaver: on macOS, ⌘⇧F is the editor's
+/// Replace.
+pub const FORMAT_KEYS: &str = "ctrl-shift-f";
 
 pub fn init(cx: &mut App) {
     // Bound inside the editor too, where ⌘↩ would otherwise be its own Enter.
@@ -57,6 +62,7 @@ pub fn init(cx: &mut App) {
             RunScript,
             Some(&format!("{CONTEXT} > Input")),
         ),
+        KeyBinding::new(FORMAT_KEYS, FormatSql, Some(CONTEXT)),
     ]);
 }
 
@@ -319,6 +325,35 @@ impl QueryConsole {
     pub fn focus(&self, window: &mut Window, cx: &mut App) {
         self.editor
             .update(cx, |editor, cx| editor.focus(window, cx));
+    }
+
+    /// Formats the statements the selection touches, else the whole editor,
+    /// for the console's engine (see [`format`]) as one undoable edit. The
+    /// caret stays by the same text; with a selection, the statements it
+    /// touched end up selected.
+    fn format_sql(&mut self, _: &FormatSql, window: &mut Window, cx: &mut Context<Self>) {
+        let engine = self
+            .source(cx)
+            .and_then(|id| self.data_sources.read(cx).get(id))
+            .map_or(self.engine, |c| c.engine);
+        self.editor.update(cx, |editor, cx| {
+            let text = editor.value();
+            let selected = editor.selected_range();
+            let whole = selected.is_empty();
+            let range = if whole { 0..text.len() } else { selected };
+            let (new, span) = format::format_range(&text, range, engine);
+            if new != text.as_ref() {
+                let selection = if whole {
+                    let caret = format::map_offset(&text, &new, editor.cursor());
+                    caret..caret
+                } else {
+                    span
+                };
+                editor.replace_all(new, window, cx);
+                editor.set_selected_range(selection, cx);
+            }
+            editor.focus(window, cx);
+        });
     }
 
     /// What a run sends: the selection if there is one, else the whole
@@ -692,6 +727,18 @@ impl QueryConsole {
             )
             .child(sep())
             .child(
+                tool("format")
+                    .icon(Icon::new(Lucide::TextAlignStart))
+                    .tooltip_with_action(
+                        "Format the script, or the statements in the selection",
+                        &FormatSql,
+                        Some(CONTEXT),
+                    )
+                    .on_click(
+                        cx.listener(|this, _, window, cx| this.format_sql(&FormatSql, window, cx)),
+                    ),
+            )
+            .child(
                 tool("history")
                     .icon(Icon::new(Lucide::Timer))
                     .tooltip("Query history")
@@ -898,6 +945,7 @@ impl Render for QueryConsole {
             .key_context(CONTEXT)
             .on_action(cx.listener(Self::run))
             .on_action(cx.listener(Self::run_script))
+            .on_action(cx.listener(Self::format_sql))
             .size_full()
             .child(self.render_toolbar(cx))
             .child(

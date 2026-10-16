@@ -50,6 +50,7 @@ icon_assets!(
         SunMoon,
         Table,
         TableProperties,
+        TextAlignStart,
         Timer,
         Trash,
         Unplug,

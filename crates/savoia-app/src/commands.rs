@@ -155,6 +155,7 @@ pub fn commands() -> Vec<Command> {
 pub const VIEW_SHORTCUTS: &[(&str, &str)] = &[
     ("Run statement at cursor (console)", "secondary-enter"),
     ("Run whole script (console)", "secondary-shift-enter"),
+    ("Format SQL (console)", crate::console::FORMAT_KEYS),
 ];
 
 const PALETTE_KEYS: &str = "secondary-shift-p";

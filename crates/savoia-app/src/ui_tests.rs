@@ -2077,6 +2077,54 @@ async fn new_console_keys_go_to_the_new_editor(cx: &mut TestAppContext) {
     assert_eq!(console_texts(cx, &workspace), ["", "select 2", "select 4"]);
 }
 
+/// ⌃⇧F lays out the editor's SQL with keywords in capitals, or only the
+/// selection, which stays selected; one undo brings the SQL back.
+#[gpui_kit::test]
+async fn format_keys_lay_out_the_sql(cx: &mut TestAppContext) {
+    use gpui_kit::test::TestWindowExt as _;
+
+    let (_, workspace, window) = mount_workspace(cx);
+    let editor = workspace.read_with(cx, |w, cx| {
+        w.consoles()
+            .next()
+            .expect("a console")
+            .read(cx)
+            .editor()
+            .clone()
+    });
+    let text = |cx: &mut TestAppContext| editor.read_with(cx, |e, _| e.value().to_string());
+    let edit = |cx: &mut TestAppContext, sql: &str, selection: Option<std::ops::Range<usize>>| {
+        let sql = sql.to_owned();
+        cx.update_window(window, |_, window, cx| {
+            editor.update(cx, |e, cx| {
+                e.set_value(sql, window, cx);
+                if let Some(range) = selection {
+                    e.set_selected_range(range, cx);
+                }
+                e.focus(window, cx);
+            });
+            window.press(crate::console::FORMAT_KEYS, cx);
+        })
+        .unwrap();
+    };
+
+    let sql = "select id from users where id=1";
+    edit(cx, sql, None);
+    assert_eq!(text(cx), "SELECT\n  id\nFROM\n  users\nWHERE\n  id = 1");
+    cx.update_window(window, |_, window, cx| window.press("secondary-z", cx))
+        .unwrap();
+    assert_eq!(text(cx), sql);
+
+    let two = "select 1;\nselect a from t";
+    edit(cx, two, Some(10..two.len()));
+    let formatted = "select 1;\nSELECT\n  a\nFROM\n  t";
+    assert_eq!(text(cx), formatted);
+    assert_eq!(
+        editor.read_with(cx, |e, _| e.selected_range()),
+        10..formatted.len()
+    );
+}
+
 /// Double-clicking a table in the explorer opens its data, as Open data in
 /// its menu does, and leaves the row folded as it was.
 #[gpui_kit::test]

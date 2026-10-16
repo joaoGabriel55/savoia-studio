@@ -108,22 +108,12 @@ impl<'a> Splitter<'a> {
                 i = next;
                 continue;
             }
-            let rest = &self.sql[i..];
-            let c = self.bytes[i];
-            if c.is_ascii_whitespace() {
+            if self.bytes[i].is_ascii_whitespace() {
                 i += 1;
                 continue;
             }
-            if rest.starts_with("--") && (!self.mysql() || self.dash_comment(i)) {
-                i = line_end(self.sql, i);
-                continue;
-            }
-            if self.mysql() && c == b'#' {
-                i = line_end(self.sql, i);
-                continue;
-            }
-            if rest.starts_with("/*") {
-                let after = self.block_comment(i);
+            let rest = &self.sql[i..];
+            if let Some(after) = comment_end(self.sql, self.engine, i) {
                 // `/*! … */` is MySQL code the server runs.
                 if self.mysql() && rest.starts_with("/*!") {
                     self.start.get_or_insert(i);
@@ -138,13 +128,9 @@ impl<'a> Splitter<'a> {
                 continue;
             }
             self.start.get_or_insert(i);
-            i = match c {
-                b'\'' => self.quoted(i, b'\'', self.mysql() || self.escape_string(i)),
-                b'"' => self.quoted(i, b'"', self.mysql()),
-                b'`' if self.mysql() => self.quoted(i, b'`', false),
-                b'$' if !self.mysql() => self.dollar_quoted(i).unwrap_or(i + 1),
-                _ => name_end(self.sql, self.engine, i).unwrap_or_else(|| next_char(self.sql, i)),
-            };
+            i = quoted_end(self.sql, self.engine, i)
+                .or_else(|| name_end(self.sql, self.engine, i))
+                .unwrap_or_else(|| next_char(self.sql, i));
             self.end = i;
         }
         self.finish();
@@ -185,82 +171,36 @@ impl<'a> Splitter<'a> {
         }
         Some(end)
     }
+}
 
-    /// MySQL needs whitespace (or the end) after `--` for a comment.
-    fn dash_comment(&self, i: usize) -> bool {
-        self.bytes
-            .get(i + 2)
-            .is_none_or(|b| b.is_ascii_whitespace())
+/// Where the comment starting at byte `i` ends, if one starts there: at the
+/// end of its line, or past its `*/`. Shared with [`crate::format`], which
+/// must read comments exactly as the splitter does.
+pub(crate) fn comment_end(sql: &str, engine: Engine, i: usize) -> Option<usize> {
+    let rest = &sql[i..];
+    let mysql = engine == Engine::Mysql;
+    if (rest.starts_with("--") && (!mysql || dash_comment(sql.as_bytes(), i)))
+        || (mysql && rest.starts_with('#'))
+    {
+        Some(line_end(sql, i))
+    } else if rest.starts_with("/*") {
+        Some(block_comment(sql, mysql, i))
+    } else {
+        None
     }
+}
 
-    /// Where a `/* … */` comment starting at `i` ends. Postgres nests them.
-    /// Walks bytes, not `str` slices: `j` steps into multibyte characters.
-    fn block_comment(&self, i: usize) -> usize {
-        let mut depth = 0;
-        let mut j = i;
-        while j < self.bytes.len() {
-            if self.bytes[j..].starts_with(b"/*") && (depth == 0 || !self.mysql()) {
-                depth += 1;
-                j += 2;
-            } else if self.bytes[j..].starts_with(b"*/") {
-                depth -= 1;
-                j += 2;
-                if depth == 0 {
-                    return j;
-                }
-            } else {
-                j += 1;
-            }
-        }
-        self.bytes.len()
-    }
-
-    /// A Postgres `E'…'` string, where backslashes escape.
-    fn escape_string(&self, i: usize) -> bool {
-        i > 0 && matches!(self.bytes[i - 1], b'E' | b'e') && (i < 2 || !is_ident(self.bytes[i - 2]))
-    }
-
-    /// Where a quoted run starting at `i` ends. A doubled quote is part of
-    /// it, and so is a backslash-escaped one when `backslash` is set.
-    fn quoted(&self, i: usize, quote: u8, backslash: bool) -> usize {
-        let mut j = i + 1;
-        while j < self.bytes.len() {
-            let b = self.bytes[j];
-            if backslash && b == b'\\' {
-                j += 2;
-            } else if b == quote {
-                if self.bytes.get(j + 1) == Some(&quote) {
-                    j += 2;
-                } else {
-                    return j + 1;
-                }
-            } else {
-                j += 1;
-            }
-        }
-        self.bytes.len()
-    }
-
-    /// Where a `$tag$ … $tag$` string starting at `i` ends, if `i` opens one.
-    fn dollar_quoted(&self, i: usize) -> Option<usize> {
-        if i > 0 && is_ident(self.bytes[i - 1]) {
-            return None;
-        }
-        let close = self.sql[i + 1..].find('$')? + i + 1;
-        let tag = &self.sql[i + 1..close];
-        let valid = tag
-            .bytes()
-            .enumerate()
-            .all(|(k, b)| b == b'_' || b.is_ascii_alphabetic() || (k > 0 && b.is_ascii_digit()));
-        if !valid {
-            return None;
-        }
-        let delimiter = &self.sql[i..=close];
-        Some(
-            self.sql[close + 1..]
-                .find(delimiter)
-                .map_or(self.bytes.len(), |p| close + 1 + p + delimiter.len()),
-        )
+/// Where the quoted run starting at byte `i` ends, if one starts there: a
+/// string, a quoted name, or a Postgres dollar-quoted string.
+pub(crate) fn quoted_end(sql: &str, engine: Engine, i: usize) -> Option<usize> {
+    let bytes = sql.as_bytes();
+    let mysql = engine == Engine::Mysql;
+    match bytes[i] {
+        b'\'' => Some(quoted(bytes, i, b'\'', mysql || escape_string(bytes, i))),
+        b'"' => Some(quoted(bytes, i, b'"', mysql)),
+        b'`' if mysql => Some(quoted(bytes, i, b'`', false)),
+        b'$' if !mysql => dollar_quoted(sql, i),
+        _ => None,
     }
 }
 
@@ -280,7 +220,83 @@ fn name_end(sql: &str, engine: Engine, i: usize) -> Option<usize> {
     })
 }
 
-fn is_ident(b: u8) -> bool {
+/// MySQL needs whitespace (or the end) after `--` for a comment.
+fn dash_comment(bytes: &[u8], i: usize) -> bool {
+    bytes.get(i + 2).is_none_or(|b| b.is_ascii_whitespace())
+}
+
+/// Where a `/* … */` comment starting at `i` ends. Postgres nests them.
+/// Walks bytes, not `str` slices: `j` steps into multibyte characters.
+fn block_comment(sql: &str, mysql: bool, i: usize) -> usize {
+    let bytes = sql.as_bytes();
+    let mut depth = 0;
+    let mut j = i;
+    while j < bytes.len() {
+        if bytes[j..].starts_with(b"/*") && (depth == 0 || !mysql) {
+            depth += 1;
+            j += 2;
+        } else if bytes[j..].starts_with(b"*/") {
+            depth -= 1;
+            j += 2;
+            if depth == 0 {
+                return j;
+            }
+        } else {
+            j += 1;
+        }
+    }
+    bytes.len()
+}
+
+/// A Postgres `E'…'` string, where backslashes escape.
+fn escape_string(bytes: &[u8], i: usize) -> bool {
+    i > 0 && matches!(bytes[i - 1], b'E' | b'e') && (i < 2 || !is_ident(bytes[i - 2]))
+}
+
+/// Where a quoted run starting at `i` ends. A doubled quote is part of
+/// it, and so is a backslash-escaped one when `backslash` is set.
+fn quoted(bytes: &[u8], i: usize, quote: u8, backslash: bool) -> usize {
+    let mut j = i + 1;
+    while j < bytes.len() {
+        let b = bytes[j];
+        if backslash && b == b'\\' {
+            j += 2;
+        } else if b == quote {
+            if bytes.get(j + 1) == Some(&quote) {
+                j += 2;
+            } else {
+                return j + 1;
+            }
+        } else {
+            j += 1;
+        }
+    }
+    bytes.len()
+}
+
+/// Where a `$tag$ … $tag$` string starting at `i` ends, if `i` opens one.
+fn dollar_quoted(sql: &str, i: usize) -> Option<usize> {
+    if i > 0 && is_ident(sql.as_bytes()[i - 1]) {
+        return None;
+    }
+    let close = sql[i + 1..].find('$')? + i + 1;
+    let tag = &sql[i + 1..close];
+    let valid = tag
+        .bytes()
+        .enumerate()
+        .all(|(k, b)| b == b'_' || b.is_ascii_alphabetic() || (k > 0 && b.is_ascii_digit()));
+    if !valid {
+        return None;
+    }
+    let delimiter = &sql[i..=close];
+    Some(
+        sql[close + 1..]
+            .find(delimiter)
+            .map_or(sql.len(), |p| close + 1 + p + delimiter.len()),
+    )
+}
+
+pub(crate) fn is_ident(b: u8) -> bool {
     b == b'_' || b.is_ascii_alphanumeric() || b >= 0x80
 }
 
