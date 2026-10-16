@@ -2041,3 +2041,150 @@ async fn theme_commands_switch_and_persist(cx: &mut TestAppContext) {
         Some("dark")
     );
 }
+
+/// The text in each console's editor, in tab order.
+fn console_texts(cx: &mut TestAppContext, workspace: &Entity<Workspace>) -> Vec<String> {
+    workspace.read_with(cx, |w, cx| {
+        w.consoles()
+            .map(|c| c.read(cx).editor().read(cx).value().to_string())
+            .collect()
+    })
+}
+
+/// ⌘T opens a console ready for typing, and ⌘T and ⌘W keep working from
+/// inside an editor that their own tab switch hides.
+#[gpui_kit::test]
+async fn new_console_keys_go_to_the_new_editor(cx: &mut TestAppContext) {
+    use gpui_kit::test::TestWindowExt as _;
+
+    let (_, workspace, window) = mount_workspace(cx);
+    let keys = |cx: &mut TestAppContext, keys: &str, text: &str| {
+        cx.update_window(window, |_, window, cx| {
+            window.press(keys, cx);
+            window.input(text, cx);
+        })
+        .unwrap();
+        cx.run_until_parked();
+    };
+
+    keys(cx, "secondary-t", "select 2");
+    keys(cx, "secondary-t", "select 3");
+    assert_eq!(console_texts(cx, &workspace), ["", "select 2", "select 3"]);
+
+    // Closing the focused console hands the keys to the one now shown.
+    keys(cx, "secondary-w", "");
+    keys(cx, "secondary-t", "select 4");
+    assert_eq!(console_texts(cx, &workspace), ["", "select 2", "select 4"]);
+}
+
+/// ⌃⇧F lays out the editor's SQL with keywords in capitals, or only the
+/// selection, which stays selected; one undo brings the SQL back.
+#[gpui_kit::test]
+async fn format_keys_lay_out_the_sql(cx: &mut TestAppContext) {
+    use gpui_kit::test::TestWindowExt as _;
+
+    let (_, workspace, window) = mount_workspace(cx);
+    let editor = workspace.read_with(cx, |w, cx| {
+        w.consoles()
+            .next()
+            .expect("a console")
+            .read(cx)
+            .editor()
+            .clone()
+    });
+    let text = |cx: &mut TestAppContext| editor.read_with(cx, |e, _| e.value().to_string());
+    let edit = |cx: &mut TestAppContext, sql: &str, selection: Option<std::ops::Range<usize>>| {
+        let sql = sql.to_owned();
+        cx.update_window(window, |_, window, cx| {
+            editor.update(cx, |e, cx| {
+                e.set_value(sql, window, cx);
+                if let Some(range) = selection {
+                    e.set_selected_range(range, cx);
+                }
+                e.focus(window, cx);
+            });
+            window.press(crate::console::FORMAT_KEYS, cx);
+        })
+        .unwrap();
+    };
+
+    let sql = "select id from users where id=1";
+    edit(cx, sql, None);
+    assert_eq!(text(cx), "SELECT\n  id\nFROM\n  users\nWHERE\n  id = 1");
+    cx.update_window(window, |_, window, cx| window.press("secondary-z", cx))
+        .unwrap();
+    assert_eq!(text(cx), sql);
+
+    let two = "select 1;\nselect a from t";
+    edit(cx, two, Some(10..two.len()));
+    let formatted = "select 1;\nSELECT\n  a\nFROM\n  t";
+    assert_eq!(text(cx), formatted);
+    assert_eq!(
+        editor.read_with(cx, |e, _| e.selected_range()),
+        10..formatted.len()
+    );
+}
+
+/// Double-clicking a table in the explorer opens its data, as Open data in
+/// its menu does, and leaves the row folded as it was.
+#[gpui_kit::test]
+async fn postgres_double_click_opens_a_tables_data(cx: &mut TestAppContext) {
+    use gpui_kit::test::TestWindowExt as _;
+    use gpui_kit::{Bounds, WindowBounds, point, px, size};
+
+    let Ok(url) = std::env::var("SAVOIA_PG_URL") else {
+        return;
+    };
+    let (ds, _) = save_and_connect(cx, &url);
+    let id = ds.read_with(cx, |ds, _| ds.connections()[0].id);
+    // A schema of its own: tests run at once, on one database.
+    exec(
+        session_of(cx, &ds).expect("connected"),
+        "DROP SCHEMA IF EXISTS it_click CASCADE;
+         CREATE SCHEMA it_click;
+         CREATE TABLE it_click.orders (id int PRIMARY KEY, placed_at timestamptz);",
+    );
+    ds.update(cx, |ds, cx| ds.refresh(id, cx));
+    wait_until(cx, "the refresh", |cx| refresh_state(cx, &ds).is_none());
+    cx.update(|cx| {
+        crate::console::init(cx);
+        crate::commands::init(cx);
+    });
+    // Tall enough to show every row the test opens.
+    let options = WindowOptions {
+        window_bounds: Some(WindowBounds::Windowed(Bounds::new(
+            point(px(0.), px(0.)),
+            size(px(1200.), px(4000.)),
+        ))),
+        ..WindowOptions::default()
+    };
+    let (window, workspace) = cx
+        .update(|cx| {
+            gpui_kit::open_window(options, cx, |window, cx| {
+                cx.new(|cx| Workspace::with_data_sources(ds.clone(), window, cx))
+            })
+        })
+        .expect("window");
+    let explorer = workspace.read_with(cx, |w, _| w.explorer().clone());
+    explorer.update(cx, |e, cx| e.expand(&["it_click"], cx));
+    settled_labels(cx, &explorer);
+    explorer.update(cx, |e, cx| e.expand(&["it_click", "tables"], cx));
+    let before = settled_labels(cx, &explorer);
+
+    let row = gpui_kit::SharedString::from(format!("table:{id}/savoia/it_click/orders"));
+    cx.update_window(window, |_, window, cx| window.double_click(row, cx))
+        .unwrap();
+    let node = NodeRef {
+        connection: id,
+        database: "savoia".into(),
+        schema: "it_click".into(),
+        table: Some("orders".into()),
+    };
+    let shown = workspace.read_with(cx, |w, cx| {
+        w.data_views()
+            .map(|view| view.read(cx).shows(&node))
+            .collect::<Vec<_>>()
+    });
+    assert_eq!(shown, [true], "one data view, of it_click.orders");
+    assert_eq!(settled_labels(cx, &explorer), before);
+}

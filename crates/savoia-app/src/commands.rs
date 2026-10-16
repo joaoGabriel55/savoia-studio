@@ -3,6 +3,7 @@
 //! here; one table feeds the palette, the menus and Settings › Keyboard.
 
 use gpui_kit::assets::IconName as Lucide;
+use gpui_kit::component::kbd::Kbd;
 use gpui_kit::component::{Icon, IconName};
 use gpui_kit::*;
 
@@ -28,6 +29,7 @@ actions!(
 
 pub const DOCS_URL: &str = "https://joaogabriel55.github.io/savoia-studio/";
 pub const KOFI_URL: &str = "https://ko-fi.com/O5I528IC3A";
+pub const NEW_CONSOLE_KEYS: &str = "secondary-t";
 
 /// A command as the palette and the keyboard list show it.
 pub struct Command {
@@ -58,7 +60,7 @@ pub fn commands() -> Vec<Command> {
             "New console",
             Lucide::SquareTerminal,
             NewConsole,
-            Some("secondary-t"),
+            Some(NEW_CONSOLE_KEYS),
             ["sql", "query", "tab"]
         ),
         command!(
@@ -153,6 +155,7 @@ pub fn commands() -> Vec<Command> {
 pub const VIEW_SHORTCUTS: &[(&str, &str)] = &[
     ("Run statement at cursor (console)", "secondary-enter"),
     ("Run whole script (console)", "secondary-shift-enter"),
+    ("Format SQL (console)", crate::console::FORMAT_KEYS),
 ];
 
 const PALETTE_KEYS: &str = "secondary-shift-p";
@@ -196,4 +199,12 @@ pub fn init(cx: &mut App) {
 /// The palette's own shortcut, for the keyboard list.
 pub fn palette_keys() -> &'static str {
     PALETTE_KEYS
+}
+
+/// `keys` as this platform writes them, for hints in text: "⌘T" on macOS,
+/// "Ctrl+T" elsewhere.
+pub fn keys_label(keys: &str) -> String {
+    Keystroke::parse(keys)
+        .map(|keys| Kbd::format(&keys))
+        .unwrap_or_default()
 }
