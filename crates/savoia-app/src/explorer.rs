@@ -603,6 +603,24 @@ impl Explorer {
         self.data_sources.update(cx, |ds, cx| ds.refresh(id, cx));
     }
 
+    /// What a double-click on a row does: a data source connects, and a
+    /// table or view opens its data, as "Open data" does.
+    fn activate(&mut self, row: &SharedString, cx: &mut Context<Self>) {
+        match kind_of(row) {
+            "source" => {
+                if let Some(id) = connection_of(row) {
+                    self.connect(id, cx);
+                }
+            }
+            "table" | "view" => {
+                if let Some(node) = self.nodes.get(row).cloned() {
+                    cx.emit(ExplorerEvent::OpenData(node));
+                }
+            }
+            _ => {}
+        }
+    }
+
     /// Runs an action from the table menu. The row is selected first, since
     /// the console runs against the explorer's selection.
     fn table_action(
@@ -967,7 +985,7 @@ impl Render for Explorer {
             .when(!empty, |el| {
                 el.child(
                     div().flex_1().min_h_0().py_1().child(
-                        tree(&self.tree, move |ix, entry, _selected, _, _| {
+                        tree(&self.tree, move |_, entry, _selected, _, _| {
                             let id = entry.item().id.clone();
                             let depth = entry.depth() as f32;
                             let muted = theme.muted_foreground;
@@ -998,15 +1016,14 @@ impl Render for Explorer {
                             );
                             let this = this.clone();
 
-                            ListItem::new(ix)
+                            // The row's own id, not its index: rows shift as
+                            // others expand.
+                            ListItem::new(id.clone())
                                 .py_0p5()
                                 .pl(px(6. + depth * 14.))
                                 .on_click(move |event, _, cx| {
-                                    // Double-click a data source to connect.
-                                    if event.click_count() == 2
-                                        && let Some(id) = source
-                                    {
-                                        this.update(cx, |this, cx| this.connect(id, cx)).ok();
+                                    if event.click_count() == 2 {
+                                        this.update(cx, |this, cx| this.activate(&id, cx)).ok();
                                     }
                                 })
                                 .child(

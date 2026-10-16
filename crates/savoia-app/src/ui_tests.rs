@@ -2041,3 +2041,67 @@ async fn theme_commands_switch_and_persist(cx: &mut TestAppContext) {
         Some("dark")
     );
 }
+
+/// Double-clicking a table in the explorer opens its data, as Open data in
+/// its menu does, and leaves the row folded as it was.
+#[gpui_kit::test]
+async fn postgres_double_click_opens_a_tables_data(cx: &mut TestAppContext) {
+    use gpui_kit::test::TestWindowExt as _;
+    use gpui_kit::{Bounds, WindowBounds, point, px, size};
+
+    let Ok(url) = std::env::var("SAVOIA_PG_URL") else {
+        return;
+    };
+    let (ds, _) = save_and_connect(cx, &url);
+    let id = ds.read_with(cx, |ds, _| ds.connections()[0].id);
+    // A schema of its own: tests run at once, on one database.
+    exec(
+        session_of(cx, &ds).expect("connected"),
+        "DROP SCHEMA IF EXISTS it_click CASCADE;
+         CREATE SCHEMA it_click;
+         CREATE TABLE it_click.orders (id int PRIMARY KEY, placed_at timestamptz);",
+    );
+    ds.update(cx, |ds, cx| ds.refresh(id, cx));
+    wait_until(cx, "the refresh", |cx| refresh_state(cx, &ds).is_none());
+    cx.update(|cx| {
+        crate::console::init(cx);
+        crate::commands::init(cx);
+    });
+    // Tall enough to show every row the test opens.
+    let options = WindowOptions {
+        window_bounds: Some(WindowBounds::Windowed(Bounds::new(
+            point(px(0.), px(0.)),
+            size(px(1200.), px(4000.)),
+        ))),
+        ..WindowOptions::default()
+    };
+    let (window, workspace) = cx
+        .update(|cx| {
+            gpui_kit::open_window(options, cx, |window, cx| {
+                cx.new(|cx| Workspace::with_data_sources(ds.clone(), window, cx))
+            })
+        })
+        .expect("window");
+    let explorer = workspace.read_with(cx, |w, _| w.explorer().clone());
+    explorer.update(cx, |e, cx| e.expand(&["it_click"], cx));
+    settled_labels(cx, &explorer);
+    explorer.update(cx, |e, cx| e.expand(&["it_click", "tables"], cx));
+    let before = settled_labels(cx, &explorer);
+
+    let row = gpui_kit::SharedString::from(format!("table:{id}/savoia/it_click/orders"));
+    cx.update_window(window, |_, window, cx| window.double_click(row, cx))
+        .unwrap();
+    let node = NodeRef {
+        connection: id,
+        database: "savoia".into(),
+        schema: "it_click".into(),
+        table: Some("orders".into()),
+    };
+    let shown = workspace.read_with(cx, |w, cx| {
+        w.data_views()
+            .map(|view| view.read(cx).shows(&node))
+            .collect::<Vec<_>>()
+    });
+    assert_eq!(shown, [true], "one data view, of it_click.orders");
+    assert_eq!(settled_labels(cx, &explorer), before);
+}

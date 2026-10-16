@@ -1,6 +1,6 @@
 # Browse and edit data
 
-Right-click a table and choose **Open data** to browse it without writing SQL.
+Double-click a table, or right-click it and choose **Open data**, to browse it without writing SQL.
 
 <figure class="shot">
   <img src="media/data-view.webp" width="2000" height="1265" loading="lazy" alt="The data view of the players table: 200 rows with sortable headers, Summarize, Columns and a filter bar.">

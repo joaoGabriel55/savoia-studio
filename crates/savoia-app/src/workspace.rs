@@ -224,6 +224,14 @@ impl Workspace {
     }
 
     #[cfg(test)]
+    pub fn data_views(&self) -> impl Iterator<Item = &Entity<DataView>> {
+        self.pages.iter().filter_map(|page| match page {
+            Page::Data(view) => Some(view),
+            _ => None,
+        })
+    }
+
+    #[cfg(test)]
     pub fn settings_tabs(&self) -> usize {
         self.pages
             .iter()
