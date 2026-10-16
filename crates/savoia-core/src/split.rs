@@ -143,7 +143,7 @@ impl<'a> Splitter<'a> {
                 b'"' => self.quoted(i, b'"', self.mysql()),
                 b'`' if self.mysql() => self.quoted(i, b'`', false),
                 b'$' if !self.mysql() => self.dollar_quoted(i).unwrap_or(i + 1),
-                _ => next_char(self.sql, i),
+                _ => name_end(self.sql, self.engine, i).unwrap_or_else(|| next_char(self.sql, i)),
             };
             self.end = i;
         }
@@ -264,6 +264,22 @@ impl<'a> Splitter<'a> {
     }
 }
 
+/// Where the Postgres name starting at byte `i` ends, if one starts there.
+/// A `$` inside a name is part of it (`a$$b`), so it opens no dollar quote.
+/// MySQL names take `$` too, but MySQL has no dollar quotes, and a script
+/// under `DELIMITER $$` ends `END$$`: there the splitter goes byte by byte.
+fn name_end(sql: &str, engine: Engine, i: usize) -> Option<usize> {
+    let bytes = sql.as_bytes();
+    let starts = bytes[i] == b'_' || bytes[i].is_ascii_alphabetic() || bytes[i] >= 0x80;
+    (engine == Engine::Postgres && starts).then(|| {
+        let len = bytes[i..]
+            .iter()
+            .take_while(|&&b| is_ident(b) || b == b'$')
+            .count();
+        i + len
+    })
+}
+
 fn is_ident(b: u8) -> bool {
     b == b'_' || b.is_ascii_alphanumeric() || b >= 0x80
 }
@@ -329,6 +345,14 @@ mod tests {
     fn leading_comments_are_not_part_of_a_statement() {
         let sql = "-- first\n/* note */\nSELECT 1;";
         assert_eq!(texts(sql, Engine::Postgres), ["SELECT 1"]);
+    }
+
+    #[test]
+    fn a_dollar_inside_a_postgres_name_opens_no_quote() {
+        assert_eq!(
+            texts("SELECT a$$b$; SELECT $$x;$$", Engine::Postgres),
+            ["SELECT a$$b$", "SELECT $$x;$$"]
+        );
     }
 
     #[test]
