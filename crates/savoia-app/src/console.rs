@@ -28,6 +28,7 @@ use savoia_core::export::Format;
 use savoia_core::{AppError, ConnectionId, Engine, QueryEvent, split};
 use savoia_store::HistoryEntry;
 
+use crate::commands::keys_label;
 use crate::completion::SqlCompletion;
 use crate::data_sources::{DataSources, SourceState};
 use crate::explorer::Explorer;
@@ -312,6 +313,12 @@ impl QueryConsole {
             self.run(&RunQuery, window, cx);
         }
         cx.notify();
+    }
+
+    /// Puts the keyboard in the editor.
+    pub fn focus(&self, window: &mut Window, cx: &mut App) {
+        self.editor
+            .update(cx, |editor, cx| editor.focus(window, cx));
     }
 
     /// What a run sends: the selection if there is one, else the whole
@@ -659,14 +666,18 @@ impl QueryConsole {
                     .small()
                     .icon(Icon::new(IconName::Play))
                     .label("Run")
-                    .tooltip("Run the statement at the caret, or the selection (⌘↩)")
+                    .tooltip_with_action(
+                        "Run the statement at the caret, or the selection",
+                        &RunQuery,
+                        Some(CONTEXT),
+                    )
                     .disabled(running)
                     .on_click(cx.listener(|this, _, window, cx| this.run(&RunQuery, window, cx))),
             )
             .child(
                 tool("run-script")
                     .icon(Icon::new(Lucide::ListVideo))
-                    .tooltip("Run the whole script (⇧⌘↩)")
+                    .tooltip_with_action("Run the whole script", &RunScript, Some(CONTEXT))
                     .band_disabled(running)
                     .on_click(
                         cx.listener(|this, _, window, cx| this.run_script(&RunScript, window, cx)),
@@ -760,9 +771,12 @@ impl QueryConsole {
                 .text_sm()
                 .text_color(theme.muted_foreground)
                 .child(if self.is_running() {
-                    "Running…"
+                    "Running…".to_string()
                 } else {
-                    "Run a query (⌘↩) to see results."
+                    format!(
+                        "Run a query ({}) to see results.",
+                        keys_label("secondary-enter")
+                    )
                 })
                 .into_any_element(),
             _ => v_flex()

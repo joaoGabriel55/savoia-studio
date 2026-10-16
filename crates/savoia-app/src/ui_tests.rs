@@ -2042,6 +2042,41 @@ async fn theme_commands_switch_and_persist(cx: &mut TestAppContext) {
     );
 }
 
+/// The text in each console's editor, in tab order.
+fn console_texts(cx: &mut TestAppContext, workspace: &Entity<Workspace>) -> Vec<String> {
+    workspace.read_with(cx, |w, cx| {
+        w.consoles()
+            .map(|c| c.read(cx).editor().read(cx).value().to_string())
+            .collect()
+    })
+}
+
+/// ⌘T opens a console ready for typing, and ⌘T and ⌘W keep working from
+/// inside an editor that their own tab switch hides.
+#[gpui_kit::test]
+async fn new_console_keys_go_to_the_new_editor(cx: &mut TestAppContext) {
+    use gpui_kit::test::TestWindowExt as _;
+
+    let (_, workspace, window) = mount_workspace(cx);
+    let keys = |cx: &mut TestAppContext, keys: &str, text: &str| {
+        cx.update_window(window, |_, window, cx| {
+            window.press(keys, cx);
+            window.input(text, cx);
+        })
+        .unwrap();
+        cx.run_until_parked();
+    };
+
+    keys(cx, "secondary-t", "select 2");
+    keys(cx, "secondary-t", "select 3");
+    assert_eq!(console_texts(cx, &workspace), ["", "select 2", "select 3"]);
+
+    // Closing the focused console hands the keys to the one now shown.
+    keys(cx, "secondary-w", "");
+    keys(cx, "secondary-t", "select 4");
+    assert_eq!(console_texts(cx, &workspace), ["", "select 2", "select 4"]);
+}
+
 /// Double-clicking a table in the explorer opens its data, as Open data in
 /// its menu does, and leaves the row folded as it was.
 #[gpui_kit::test]

@@ -1,6 +1,6 @@
 # Write and run SQL
 
-Each console tab is bound to one data source. Open one with **⌘T** (Ctrl+T on Windows and Linux) or the **+** on the tab bar.
+Each console tab is bound to one data source. Open one with **⌘T** (Ctrl+T on Windows and Linux) or the **+** on the tab bar, and start typing.
 
 <figure class="shot">
   <video poster="media/console-completion.webp" width="1200" height="542" autoplay muted loop playsinline preload="metadata" aria-label="Recording: after JOIN, completion offers serie_a.clubs c ON c.id = p.club_id from the foreign key; the query runs and returns 249 rows.">
