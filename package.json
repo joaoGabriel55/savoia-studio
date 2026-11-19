@@ -1,6 +1,6 @@
 {
   "name": "savoia-studio",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
   "description": "Release tooling and the local docs server: Changesets owns the version, scripts/sync-version.mjs copies it into Cargo.toml.",
   "license": "MIT OR Apache-2.0",

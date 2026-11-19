@@ -1,5 +1,15 @@
 # savoia-studio
 
+## 0.2.0
+
+### Minor Changes
+
+- [#17](https://github.com/joaoGabriel55/savoia-studio/pull/17) [`15b2b5d`](https://github.com/joaoGabriel55/savoia-studio/commit/15b2b5d0532b453b5905100d6ab27f9cb74c8039) Thanks [@tonyaraujop](https://github.com/tonyaraujop)! - Double-click a table or view in the explorer to open its data. A new console (⌘T, Ctrl+T) takes the keyboard at once, and the app's shortcuts keep working after a tab with focus closes. **Ctrl+Shift+F** formats the script, or the statements in the selection: one clause per line, keywords in capitals, names left as typed. Fixed: Run and completion crashed on a block comment with accented text, such as `/* relatório */`.
+
+### Patch Changes
+
+- [#17](https://github.com/joaoGabriel55/savoia-studio/pull/17) [`1c3c945`](https://github.com/joaoGabriel55/savoia-studio/commit/1c3c9455f8db9a19bda5a9d72d6d4b8a2fe3b72e) Thanks [@tonyaraujop](https://github.com/tonyaraujop)! - Fixed: the app icon was missing on Linux and Windows. The window, taskbar and dock now show the Savoia shield, as do the Windows installer and its shortcuts.
+
 ## 0.1.1
 
 ### Patch Changes
