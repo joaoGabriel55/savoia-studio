@@ -10,7 +10,9 @@
     "version": "changeset version && node scripts/sync-version.mjs",
     "tag": "node scripts/tag-release.mjs",
     "docs": "node scripts/docs.mjs",
-    "docs:build": "node scripts/docs.mjs --build"
+    "docs:build": "node scripts/docs.mjs --build",
+    "promo": "node scripts/promo-video/render.mjs",
+    "promo:audio": "node scripts/promo-video/soundtrack.mjs"
   },
   "devDependencies": {
     "@changesets/changelog-github": "1.0.1",

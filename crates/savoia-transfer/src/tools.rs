@@ -322,7 +322,7 @@ fn probe(tool: Tool, path: PathBuf) -> Option<FoundTool> {
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         command.creation_flags(CREATE_NO_WINDOW);
     }
-    let output = command.output().ok()?;
+    let output = run_retrying_busy(&mut command)?;
     let text = format!(
         "{}{}",
         String::from_utf8_lossy(&output.stdout),
@@ -334,6 +334,23 @@ fn probe(tool: Tool, path: PathBuf) -> Option<FoundTool> {
         path,
         version,
     })
+}
+
+/// Runs `command`, retrying briefly while the executable is "text file busy".
+/// On Linux that happens right after the file was written (a package manager
+/// is still installing it, or a process forked elsewhere still holds the
+/// write descriptor), and clears up on its own.
+fn run_retrying_busy(command: &mut Command) -> Option<std::process::Output> {
+    for attempt in 0..5 {
+        match command.output() {
+            Ok(output) => return Some(output),
+            Err(error) if error.kind() == std::io::ErrorKind::ExecutableFileBusy && attempt < 4 => {
+                std::thread::sleep(std::time::Duration::from_millis(20 << attempt));
+            }
+            Err(_) => return None,
+        }
+    }
+    None
 }
 
 /// Where the official installers and package managers put the clients.
