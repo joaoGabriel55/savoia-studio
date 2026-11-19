@@ -153,8 +153,14 @@ pub fn commands() -> Vec<Command> {
 /// Shortcuts that only work in one view, listed after the commands in
 /// Settings › Keyboard. Bound in their own modules; keep these in step.
 pub const VIEW_SHORTCUTS: &[(&str, &str)] = &[
-    ("Run statement at cursor (console)", "secondary-enter"),
-    ("Run whole script (console)", "secondary-shift-enter"),
+    (
+        "Run statement at cursor (console)",
+        crate::console::RUN_KEYS,
+    ),
+    (
+        "Run whole script (console)",
+        crate::console::RUN_SCRIPT_KEYS,
+    ),
     ("Format SQL (console)", crate::console::FORMAT_KEYS),
 ];
 

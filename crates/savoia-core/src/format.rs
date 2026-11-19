@@ -222,16 +222,18 @@ struct Place<'a> {
     follows: Option<&'a str>,
     /// The token right after it.
     next: Option<&'a str>,
-    /// Right after a number or a `?` placeholder.
-    after_number: bool,
-    /// Inside a `CASE` that hasn't ended.
+    /// Right after `LIMIT` and its count, a number or a `?` placeholder.
+    after_limit: bool,
+    /// Inside a `CASE` expression that hasn't ended. A routine's `CASE`
+    /// statement doesn't count: it ends with `END CASE`, and an `end` inside
+    /// it can be a table.
     in_case: bool,
 }
 
 /// Whether `word`, in capitals, is a keyword where it stands. In MySQL, a
 /// word it doesn't reserve counts only where no name can stand: first in a
 /// statement, right after certain keywords, `DUPLICATE` in `ON DUPLICATE
-/// KEY`, `END` closing a `CASE`, and `OFFSET` after a number.
+/// KEY`, `END` closing a `CASE` expression, and `OFFSET` after `LIMIT n`.
 fn is_keyword(word: &str, engine: Engine, at: &Place) -> bool {
     let postgres = engine == Engine::Postgres;
     let listed = |list: &str| list.split_whitespace().any(|k| k == word);
@@ -250,7 +252,7 @@ fn is_keyword(word: &str, engine: Engine, at: &Place) -> bool {
         || (postgres && after(POSTGRES_AFTER))
         || (word == "DUPLICATE" && one_of(at.follows, "ON") && one_of(at.next, "KEY"))
         || (word == "END" && at.in_case)
-        || (word == "OFFSET" && at.after_number)
+        || (word == "OFFSET" && at.after_limit)
 }
 
 /// `sql` with its keywords in capitals: see [`is_keyword`]. A word next to a
@@ -263,7 +265,16 @@ fn capitalize(sql: &str, engine: Engine) -> String {
     let text = |t: &Token| &sql[t.range.clone()];
     let mut out = String::with_capacity(sql.len());
     let mut copied = 0;
-    let mut cases = 0;
+    // The `CASE`s still open, innermost last: `true` for a routine's `CASE`
+    // statement, `false` for a `CASE` expression.
+    let mut cases: Vec<bool> = Vec::new();
+    let is = |t: Option<&Token>, words: &str| {
+        t.is_some_and(|t| {
+            words
+                .split_whitespace()
+                .any(|w| w.eq_ignore_ascii_case(text(t)))
+        })
+    };
     for (k, token) in tokens.iter().enumerate() {
         if !matches!(token.kind, Kind::Word | Kind::Call) {
             continue;
@@ -276,15 +287,32 @@ fn capitalize(sql: &str, engine: Engine) -> String {
                 .filter(|t| matches!(t.kind, Kind::Word | Kind::Call))
                 .map(text),
             next: tokens.get(k + 1).map(text),
-            after_number: before.is_some_and(|t| t.kind == Kind::Number || text(t) == "?"),
-            in_case: cases > 0,
+            after_limit: before.is_some_and(|t| t.kind == Kind::Number || text(t) == "?")
+                && is(k.checked_sub(2).map(|p| &tokens[p]), "LIMIT"),
+            in_case: cases.last() == Some(&false),
         };
         let qualified = before.is_some_and(|t| text(t) == ".") || place.next == Some(".");
         let after_end = place.follows.is_some_and(|w| w.eq_ignore_ascii_case("END"));
         match word.as_str() {
             // The `CASE` of a MySQL routine's `END CASE` closes, not opens.
-            "CASE" if !after_end => cases += 1,
-            "END" if cases > 0 => cases -= 1,
+            "CASE" if !after_end => {
+                // A statement where a routine's statements start, unless an
+                // open `CASE` expression makes its `THEN` or `ELSE` one too.
+                let statement = place.first
+                    || is(before, ":")
+                    || (is(before, "BEGIN DO LOOP REPEAT THEN ELSE")
+                        && cases.last() != Some(&false));
+                cases.push(statement);
+            }
+            "END" => match cases.last() {
+                Some(false) => {
+                    cases.pop();
+                }
+                Some(true) if is(tokens.get(k + 1), "CASE") => {
+                    cases.pop();
+                }
+                _ => {}
+            },
             _ => {}
         }
         if !qualified && word != text(token) && is_keyword(&word, engine, &place) {
@@ -565,6 +593,26 @@ mod tests {
             (
                 "begin case x when 1 then select 1; end case; select * from end; end",
                 "BEGIN CASE x WHEN 1 THEN SELECT 1; END CASE; SELECT * FROM end; END",
+            ),
+            // Inside a `CASE` statement, `end` can be a table; a `CASE`
+            // expression in it still ends with `END`.
+            (
+                "case v when 1 then update end set a = case when b then 1 end; end case",
+                "CASE v WHEN 1 THEN UPDATE end SET a = CASE WHEN b THEN 1 END; END CASE",
+            ),
+            (
+                "begin if x then case when y then delete from end; end case; end if; end",
+                "BEGIN IF x THEN CASE WHEN y THEN DELETE FROM end; END CASE; END IF; END",
+            ),
+            // A `CASE` expression after `THEN` of another one.
+            (
+                "select case when a then case when b then 1 end end from end",
+                "SELECT CASE WHEN a THEN CASE WHEN b THEN 1 END END FROM end",
+            ),
+            // `OFFSET` only after `LIMIT n`; elsewhere it can be an alias.
+            (
+                "select 1 offset from t limit ? offset ?",
+                "SELECT 1 offset FROM t LIMIT ? OFFSET ?",
             ),
         ] {
             assert_eq!(capitalize(sql, Engine::Mysql), capitalized, "{sql}");

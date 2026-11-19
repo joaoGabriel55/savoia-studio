@@ -43,6 +43,12 @@ actions!(console, [RunQuery, RunScript, FormatSql]);
 
 const CONTEXT: &str = "QueryConsole";
 
+/// Run the statement at the caret, or the selection.
+pub const RUN_KEYS: &str = "secondary-enter";
+
+/// Run the whole script.
+pub const RUN_SCRIPT_KEYS: &str = "secondary-shift-enter";
+
 /// Ctrl+Shift+F everywhere, as in DBeaver: on macOS, ⌘⇧F is the editor's
 /// Replace.
 pub const FORMAT_KEYS: &str = "ctrl-shift-f";
@@ -50,15 +56,11 @@ pub const FORMAT_KEYS: &str = "ctrl-shift-f";
 pub fn init(cx: &mut App) {
     // Bound inside the editor too, where ⌘↩ would otherwise be its own Enter.
     cx.bind_keys([
-        KeyBinding::new("secondary-enter", RunQuery, Some(CONTEXT)),
+        KeyBinding::new(RUN_KEYS, RunQuery, Some(CONTEXT)),
+        KeyBinding::new(RUN_KEYS, RunQuery, Some(&format!("{CONTEXT} > Input"))),
+        KeyBinding::new(RUN_SCRIPT_KEYS, RunScript, Some(CONTEXT)),
         KeyBinding::new(
-            "secondary-enter",
-            RunQuery,
-            Some(&format!("{CONTEXT} > Input")),
-        ),
-        KeyBinding::new("secondary-shift-enter", RunScript, Some(CONTEXT)),
-        KeyBinding::new(
-            "secondary-shift-enter",
+            RUN_SCRIPT_KEYS,
             RunScript,
             Some(&format!("{CONTEXT} > Input")),
         ),
@@ -820,10 +822,7 @@ impl QueryConsole {
                 .child(if self.is_running() {
                     "Running…".to_string()
                 } else {
-                    format!(
-                        "Run a query ({}) to see results.",
-                        keys_label("secondary-enter")
-                    )
+                    format!("Run a query ({}) to see results.", keys_label(RUN_KEYS))
                 })
                 .into_any_element(),
             _ => v_flex()
