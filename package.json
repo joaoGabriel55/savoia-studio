@@ -9,6 +9,8 @@
     "changeset": "changeset",
     "version": "changeset version && node scripts/sync-version.mjs",
     "tag": "node scripts/tag-release.mjs",
+    "release:check": "node scripts/release-check.mjs",
+    "test:scripts": "node --test scripts/*.test.mjs",
     "docs": "node scripts/docs.mjs",
     "docs:build": "node scripts/docs.mjs --build",
     "promo": "node scripts/promo-video/render.mjs",
