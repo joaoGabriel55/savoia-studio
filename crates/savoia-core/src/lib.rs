@@ -11,6 +11,7 @@ pub mod edit;
 mod engine;
 mod error;
 pub mod export;
+pub mod format;
 mod query;
 pub mod split;
 pub mod sql_text;

@@ -33,6 +33,20 @@ mod workspace;
 use gpui_kit::component::TitleBar;
 use gpui_kit::*;
 
+/// The Wayland app id and X11 `WM_CLASS`. Desktops find the icon by matching
+/// it to `savoia-studio.desktop`, which every Linux package installs.
+const APP_ID: &str = "savoia-studio";
+
+/// The window icon on X11, which also shows it for an AppImage that installed
+/// no `.desktop` file. Wayland has no such property and goes by [`APP_ID`].
+#[cfg(target_os = "linux")]
+fn x11_icon() -> Option<std::sync::Arc<image::RgbaImage>> {
+    let png = include_bytes!("../../../assets/icons/icon-128.png");
+    image::load_from_memory_with_format(png, image::ImageFormat::Png)
+        .map(|icon| std::sync::Arc::new(icon.into_rgba8()))
+        .ok()
+}
+
 fn main() {
     crash::install();
     gpui_kit::application()
@@ -48,6 +62,9 @@ fn main() {
             let options = WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 window_min_size: Some(size(px(900.), px(560.))),
+                app_id: Some(APP_ID.into()),
+                #[cfg(target_os = "linux")]
+                icon: x11_icon(),
                 ..TitleBar::window_options()
             };
             #[cfg(feature = "bench")]

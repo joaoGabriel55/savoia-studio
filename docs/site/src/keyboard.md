@@ -16,6 +16,7 @@
 | Next tab / previous tab | ⌃⇥ / ⌃⇧⇥ | Ctrl+Tab / Ctrl+Shift+Tab |
 | Run statement at the caret | ⌘↩ | Ctrl+Enter |
 | Run whole script | ⌘⇧↩ | Ctrl+Shift+Enter |
+| Format SQL (script, or the selected statements) | ⌃⇧F | Ctrl+Shift+F |
 | Quit | ⌘Q | Ctrl+Q |
 
 **Settings › Keyboard** shows the same list in the app.

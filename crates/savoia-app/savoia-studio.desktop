@@ -4,5 +4,6 @@ Name=Savoia Studio
 Comment=A native database client for PostgreSQL and MySQL
 Exec=savoia-studio
 Icon=savoia-studio
+StartupWMClass=savoia-studio
 Categories=Development;Database;
 Terminal=false

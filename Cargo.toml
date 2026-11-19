@@ -29,6 +29,10 @@ lsp-types = "=0.97.0"
 anyhow = "1"
 # Auto-update from GitHub Releases; see the packaging ADR.
 cargo-packager-updater = "0.2.3"
+# Decodes the X11 window icon. Same major as GPUI's own, so no second copy.
+image = { version = "0.25", default-features = false, features = ["png"] }
+# Embeds the Windows .exe icon; GPUI loads it as resource 1.
+winresource = "0.1"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

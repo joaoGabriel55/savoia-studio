@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 async-trait.workspace = true
 serde.workspace = true
+sqlformat = "0.5"
 thiserror.workspace = true
 tokio.workspace = true
 url.workspace = true

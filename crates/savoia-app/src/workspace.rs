@@ -154,6 +154,9 @@ impl Workspace {
             cx.observe(&data_sources, |_, _, cx| cx.notify()),
             cx.subscribe_in(&data_sources, window, Self::on_data_source_event),
             cx.subscribe_in(&explorer, window, Self::on_explorer_event),
+            // A focused element that goes away (its tab closed, or hidden by
+            // another) takes the focus along, and keys would reach nothing.
+            cx.on_focus_lost(window, Self::focus_active),
         ];
         let mut this = Self {
             pages: Vec::new(),
@@ -190,7 +193,18 @@ impl Workspace {
 
     pub fn new_console(&mut self, _: &NewConsole, window: &mut Window, cx: &mut Context<Self>) {
         let source = self.explorer.read(cx).selected_connection(cx);
-        self.open_console(source, window, cx);
+        let console = self.open_console(source, window, cx);
+        // Ready for typing, like a new tab anywhere else.
+        console.update(cx, |console, cx| console.focus(window, cx));
+    }
+
+    /// Hands the keyboard to the active tab: its console's editor, else the
+    /// workspace itself, which runs the app-wide keys.
+    fn focus_active(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        match self.active_console() {
+            Some(console) => console.update(cx, |console, cx| console.focus(window, cx)),
+            None => window.focus(&self.focus, cx),
+        }
     }
 
     /// Closes a tab, cancelling its console's running query.
@@ -219,6 +233,14 @@ impl Workspace {
     pub fn consoles(&self) -> impl Iterator<Item = &Entity<QueryConsole>> {
         self.pages.iter().filter_map(|page| match page {
             Page::Console(console) => Some(console),
+            _ => None,
+        })
+    }
+
+    #[cfg(test)]
+    pub fn data_views(&self) -> impl Iterator<Item = &Entity<DataView>> {
+        self.pages.iter().filter_map(|page| match page {
+            Page::Data(view) => Some(view),
             _ => None,
         })
     }
@@ -845,7 +867,10 @@ impl Render for Workspace {
                     Button::new("empty-new-console")
                         .small()
                         .icon(Icon::new(Lucide::SquareTerminal))
-                        .label("New console (⌘T)")
+                        .label(format!(
+                            "New console ({})",
+                            commands::keys_label(commands::NEW_CONSOLE_KEYS)
+                        ))
                         .on_click(cx.listener(|this, _, window, cx| {
                             this.new_console(&NewConsole, window, cx)
                         })),
@@ -866,7 +891,7 @@ impl Render for Workspace {
                             .xsmall()
                             .mx_1()
                             .icon(Icon::new(IconName::Plus))
-                            .tooltip("New console (⌘T)")
+                            .tooltip_with_action("New console", &NewConsole, None)
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.new_console(&NewConsole, window, cx)
                             })),
