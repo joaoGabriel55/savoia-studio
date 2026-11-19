@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Savoia Studio promo</title>
+<!-- One 1920x1080 stage. Nothing animates on its own: render.mjs calls
+     window.renderFrame(t) for every frame, so each frame is a pure function of t. -->
+<style>
+@font-face {
+  font-family: "Archivo";
+  src: url("/docs/site/src/fonts/archivo-wdth-wght.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+}
+:root {
+  --bg: #0E110F;
+  --fg: #ECE9E2;
+  --muted: #8D938F;
+  --dim: #4A514C;
+  --ivrea: #1F5A43;
+  --line: #5FB088;
+  --savoy: #5B9BE6;
+  --display: "Archivo", system-ui, sans-serif;
+  --sans: -apple-system, system-ui, sans-serif;
+  --mono: "SF Mono", ui-monospace, Menlo, monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--bg); color: var(--fg); }
+body { font-family: var(--sans); -webkit-font-smoothing: antialiased; }
+#stage { position: absolute; inset: 0; overflow: hidden; }
+
+#bg { position: absolute; inset: -200px; }
+#grid {
+  position: absolute; inset: 0;
+  background-image: radial-gradient(rgba(236,233,226,0.07) 1.2px, transparent 1.4px);
+  background-size: 40px 40px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, #000 30%, transparent 75%);
+}
+#vignette { position: absolute; inset: 0; background: radial-gradient(ellipse 85% 75% at 50% 50%, transparent 55%, rgba(0,0,0,0.55) 100%); }
+
+.scene { position: absolute; inset: 0; opacity: 0; }
+.display { font-family: var(--display); font-stretch: 112%; font-weight: 800; letter-spacing: -0.025em; line-height: 1; }
+.center { position: absolute; left: 0; right: 0; text-align: center; }
+.w { display: inline-block; will-change: transform, opacity; }
+.muted { color: var(--muted); }
+.green { color: var(--line); }
+
+/* S1 hook */
+#q { top: 300px; font-size: 66px; font-weight: 700; }
+#num { top: 430px; font-size: 300px; font-variant-numeric: tabular-nums; }
+#num .unit { font-size: 0.42em; margin-left: 0.12em; letter-spacing: 0; }
+#cap1 { top: 790px; font-size: 30px; }
+
+/* S2 logo */
+#icon2 { position: absolute; width: 240px; height: 240px; left: 840px; top: 420px; }
+#icon2 img { width: 100%; height: 100%; display: block; }
+#halo { position: absolute; width: 900px; height: 900px; left: 510px; top: 90px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(95,176,136,0.30), rgba(31,90,67,0.10) 40%, transparent 70%); }
+#word2 { position: absolute; left: 700px; top: 448px; font-size: 132px; white-space: nowrap; }
+#tag2 { position: absolute; left: 706px; top: 610px; font-size: 38px; color: var(--muted); white-space: nowrap; }
+#tag2 b { color: var(--fg); font-weight: 600; }
+
+/* S3 stack */
+#nots { top: 350px; font-size: 124px; display: flex; justify-content: center; gap: 72px; }
+.not { position: relative; display: inline-block; }
+.not .strike { position: absolute; left: -12px; right: -12px; top: 52%; height: 12px; border-radius: 6px; background: var(--line); transform-origin: left center; }
+#just { top: 610px; font-size: 92px; }
+
+/* S4 numbers */
+#h4 { top: 170px; font-size: 72px; }
+#stats { position: absolute; left: 180px; right: 180px; top: 360px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 60px; }
+.stat { border-top: 2px solid rgba(236,233,226,0.14); padding-top: 36px; position: relative; }
+.stat .bar { position: absolute; left: 0; top: -2px; height: 2px; background: var(--line); }
+.stat .v { font-size: 190px; font-variant-numeric: tabular-nums; }
+.stat .v small { font-size: 0.36em; margin-left: 0.1em; letter-spacing: 0; color: var(--line); }
+.stat .l { margin-top: 26px; font-size: 32px; line-height: 1.3; color: var(--muted); }
+.stat .l b { color: var(--fg); font-weight: 600; }
+#foot4 { top: 900px; font-size: 24px; color: var(--dim); }
+
+/* S5 product */
+.card { position: absolute; left: 50%; border-radius: 16px; overflow: hidden; background: #111;
+  box-shadow: 0 0 0 1px rgba(236,233,226,0.10), 0 50px 120px rgba(0,0,0,0.65); }
+.card img, .card video { display: block; width: 100%; height: 100%; object-fit: cover; }
+#shot { width: 1380px; height: 873px; top: 150px; margin-left: -690px; }
+#clip1 { width: 1560px; height: 705px; top: 280px; margin-left: -780px; }
+#clip2 { width: 1560px; height: 632px; top: 300px; margin-left: -780px; }
+.cap { position: absolute; left: 180px; font-size: 64px; }
+.cap .k { display: block; font-family: var(--sans); font-weight: 600; font-size: 22px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--line); margin-bottom: 18px; }
+#cap5a { top: 66px; left: 270px; font-size: 52px; }
+#cap5b, #cap5c { top: 110px; }
+
+/* S6 engines */
+#h6 { top: 200px; font-size: 84px; }
+#now { position: absolute; left: 0; right: 0; top: 380px; display: flex; justify-content: center; gap: 200px; }
+.eng { text-align: center; }
+.logo { width: 170px; height: 170px; margin: 0 auto; background: var(--fg);
+  -webkit-mask: var(--src) center / contain no-repeat; mask: var(--src) center / contain no-repeat; }
+.eng .n { margin-top: 28px; font-size: 36px; font-weight: 600; }
+#soon { position: absolute; left: 0; right: 0; top: 760px; display: flex; justify-content: center; align-items: center; gap: 64px; }
+#soon .k { font-weight: 600; font-size: 22px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); margin-right: 8px; }
+#soon .eng { display: flex; align-items: center; gap: 16px; color: var(--muted); font-size: 30px; }
+#soon .logo { width: 52px; height: 52px; background: var(--muted); margin: 0; }
+
+/* S7 CTA */
+#icon7 { position: absolute; width: 168px; height: 168px; left: 876px; top: 170px; }
+#icon7 img { width: 100%; height: 100%; }
+#word7 { top: 380px; font-size: 140px; }
+#line7 { top: 560px; font-size: 48px; font-weight: 500; }
+#chips { position: absolute; left: 0; right: 0; top: 680px; display: flex; justify-content: center; gap: 20px; }
+.chip { font-size: 26px; padding: 14px 26px; border-radius: 999px; border: 1px solid rgba(236,233,226,0.18); color: var(--fg); }
+#url { position: absolute; left: 0; right: 0; top: 820px; text-align: center; }
+#url span { display: inline-block; font-family: var(--mono); font-size: 34px; padding: 22px 40px; border-radius: 14px; background: var(--ivrea); color: #F2EFE8; }
+#fade { position: absolute; inset: 0; background: #000; opacity: 0; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="bg"></div>
+  <div id="grid"></div>
+
+  <section class="scene" id="s1">
+    <div class="center display" id="q"></div>
+    <div class="center display" id="num"><span id="numv">69</span><span class="unit">MB</span></div>
+    <div class="center muted" id="cap1">Savoia Studio, open and idle.</div>
+  </section>
+
+  <section class="scene" id="s2">
+    <div id="halo"></div>
+    <div id="icon2"><img src="/assets/app-icon.svg" alt=""></div>
+    <div class="display" id="word2">Savoia Studio</div>
+    <div id="tag2">A native desktop client for <b>PostgreSQL</b> and <b>MySQL</b>.</div>
+  </section>
+
+  <section class="scene" id="s3">
+    <div class="center display" id="nots">
+      <span class="not">Webview<i class="strike"></i></span>
+      <span class="not">JVM<i class="strike"></i></span>
+      <span class="not">Electron<i class="strike"></i></span>
+    </div>
+    <div class="center display" id="just">Just Rust, drawn on the <span class="green">GPU</span>.</div>
+  </section>
+
+  <section class="scene" id="s4">
+    <div class="center display" id="h4">Light enough to leave open all day.</div>
+    <div id="stats">
+      <div class="stat"><i class="bar"></i><div class="v display"><span data-to="69">0</span><small>MB</small></div><div class="l"><b>Memory at idle.</b><br>Physical footprint, window open.</div></div>
+      <div class="stat"><i class="bar"></i><div class="v display"><span data-to="205">0</span><small>ms</small></div><div class="l"><b>From launch to first frame.</b><br>Saved connections and a console loaded.</div></div>
+      <div class="stat"><i class="bar"></i><div class="v display"><span data-to="0" data-from="120">0</span><small>dropped</small></div><div class="l"><b>Frames over 16.7 ms</b><br>scrolling 1,000,000 rows.</div></div>
+    </div>
+    <div class="center" id="foot4">Measured on macOS 27, Apple M3 Pro, release build. Every run is in docs/benchmarks.</div>
+  </section>
+
+  <section class="scene" id="s5">
+    <div class="cap display" id="cap5a">Everything for the daily loop. Nothing in the way.</div>
+    <div class="card" id="shot"><img src="/docs/site/src/media/app-dark.webp" alt=""></div>
+    <div class="cap display" id="cap5b"><span class="k">Query</span>Completion that knows your schema.</div>
+    <div class="card" id="clip1"><video src="/docs/site/src/media/console-completion.mp4" muted preload="auto"></video></div>
+    <div class="cap display" id="cap5c"><span class="k">Edit</span>See the SQL before it commits.</div>
+    <div class="card" id="clip2"><video src="/docs/site/src/media/edit-review.mp4" muted preload="auto"></video></div>
+  </section>
+
+  <section class="scene" id="s6">
+    <div class="center display" id="h6">PostgreSQL and MySQL, today.</div>
+    <div id="now">
+      <div class="eng"><div class="logo" style="--src:url(/docs/site/src/media/engines/postgresql.svg)"></div><div class="n">PostgreSQL</div></div>
+      <div class="eng"><div class="logo" style="--src:url(/docs/site/src/media/engines/mysql.svg)"></div><div class="n">MySQL</div></div>
+    </div>
+    <div id="soon">
+      <span class="k">Coming soon</span>
+      <span class="eng"><span class="logo" style="--src:url(/docs/site/src/media/engines/mariadb.svg)"></span>MariaDB</span>
+      <span class="eng"><span class="logo" style="--src:url(/docs/site/src/media/engines/sqlite.svg)"></span>SQLite</span>
+      <span class="eng"><span class="logo" style="--src:url(/docs/site/src/media/engines/mongodb.svg)"></span>MongoDB</span>
+      <span class="eng"><span class="logo" style="--src:url(/docs/site/src/media/engines/sqlserver.svg)"></span>SQL Server</span>
+    </div>
+  </section>
+
+  <section class="scene" id="s7">
+    <div id="icon7"><img src="/assets/app-icon.svg" alt=""></div>
+    <div class="center display" id="word7">Savoia Studio</div>
+    <div class="center" id="line7">Free. No trial, no license key, no account.</div>
+    <div id="chips">
+      <span class="chip">macOS</span><span class="chip">Windows</span><span class="chip">Linux</span><span class="chip">Open source</span>
+    </div>
+    <div id="url"><span>joaogabriel55.github.io/savoia-studio</span></div>
+  </section>
+
+  <div id="vignette"></div>
+  <div id="fade"></div>
+</div>
+
+<script>
+const DURATION = 47;
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => [...document.querySelectorAll(s)];
+
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, k) => a + (b - a) * k;
+const prog = (t, a, b) => clamp((t - a) / (b - a));
+const outCubic = (k) => 1 - Math.pow(1 - k, 3);
+const outExpo = (k) => (k >= 1 ? 1 : 1 - Math.pow(2, -10 * k));
+const inOut = (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
+const outBack = (k) => { const c = 1.6; return 1 + (c + 1) * Math.pow(k - 1, 3) + c * Math.pow(k - 1, 2); };
+
+// Scene window: fades in over `fi`, out over `fo`. Returns {o, out} where out is 0..1 exit progress.
+function win(t, a, b, fi = 0.4, fo = 0.6) {
+  const i = outCubic(prog(t, a, a + fi));
+  const out = inOut(prog(t, b - fo, b));
+  return { o: i * (1 - out), out, on: t >= a && t <= b };
+}
+// Element entrance: rise + fade + unblur.
+function rise(el, t, at, dur = 0.7, dy = 40, blur = 10) {
+  const k = outExpo(prog(t, at, at + dur));
+  el.style.opacity = k;
+  el.style.transform = `translateY(${(1 - k) * dy}px)`;
+  el.style.filter = k < 1 ? `blur(${(1 - k) * blur}px)` : "none";
+  return k;
+}
+function show(id, w, extra = "") {
+  const el = document.getElementById(id);
+  el.style.opacity = w.o;
+  el.style.visibility = w.on ? "visible" : "hidden";
+  el.style.transform = extra;
+  el.style.filter = w.out > 0 ? `blur(${w.out * 12}px)` : "none";
+  return el;
+}
+
+// S1: words of the question
+const Q = "How much RAM does your database client need?".split(" ");
+$("#q").innerHTML = Q.map((w) => `<span class="w">${w}</span>`).join(" ");
+const qWords = $$("#q .w");
+
+const nf = new Intl.NumberFormat("en-US");
+const hash = (n) => { n = (n ^ 61) ^ (n >>> 16); n = n + (n << 3); n ^= n >>> 4; n = Math.imul(n, 0x27d4eb2d); return (n ^ (n >>> 15)) >>> 0; };
+
+function background(t) {
+  const a = t * 0.18;
+  const x1 = 30 + Math.cos(a) * 12, y1 = 30 + Math.sin(a * 1.3) * 10;
+  const x2 = 72 + Math.sin(a * 0.8) * 10, y2 = 72 + Math.cos(a) * 8;
+  $("#bg").style.background =
+    `radial-gradient(ellipse 45% 40% at ${x1}% ${y1}%, rgba(31,90,67,0.55), transparent 70%),` +
+    `radial-gradient(ellipse 40% 35% at ${x2}% ${y2}%, rgba(31,100,180,0.22), transparent 70%),` +
+    `#0E110F`;
+  $("#grid").style.transform = `translateY(${-(t * 8) % 40}px)`;
+}
+
+const videos = { clip1: $("#clip1 video"), clip2: $("#clip2 video") };
+async function seek(v, s) {
+  s = clamp(s, 0, v.duration - 0.05);
+  if (Math.abs(v.currentTime - s) < 0.001) return;
+  await new Promise((res) => { v.addEventListener("seeked", res, { once: true }); v.currentTime = s; });
+}
+
+window.renderFrame = async function (t) {
+  background(t);
+
+  // S1 hook: 0 – 5.6
+  {
+    const w = win(t, 0, 5.6, 0.01, 0.6);
+    show("s1", w, `translateY(${-w.out * 40}px)`);
+    qWords.forEach((el, i) => rise(el, t, 0.25 + i * 0.09, 0.8, 30, 8));
+    const n = $("#num"), v = $("#numv");
+    const k = prog(t, 2.2, 3.5);
+    n.style.opacity = outCubic(prog(t, 2.2, 2.5));
+    if (t < 3.5) {
+      // Scramble down through big numbers, then land.
+      const step = Math.floor(t * 24);
+      const span = Math.round(lerp(2400, 120, outCubic(k)));
+      v.textContent = nf.format(70 + (hash(step) % span));
+      n.style.filter = `blur(${lerp(6, 1, k)}px)`;
+      n.style.color = "var(--fg)";
+      n.style.transform = "scale(0.92)";
+    } else {
+      v.textContent = "69";
+      const b = outBack(prog(t, 3.5, 4.0));
+      n.style.filter = "none";
+      n.style.color = "var(--line)";
+      n.style.transform = `scale(${lerp(0.92, 1, b)})`;
+    }
+    rise($("#cap1"), t, 3.9, 0.7, 20, 6);
+  }
+
+  // S2 logo: 5.6 – 10.6
+  {
+    const w = win(t, 5.6, 10.6, 0.3, 0.6);
+    show("s2", w, `scale(${1 + w.out * 0.04})`);
+    const ki = outExpo(prog(t, 5.7, 6.7));
+    const km = inOut(prog(t, 6.9, 7.8));
+    const icon = $("#icon2");
+    icon.style.opacity = ki;
+    icon.style.filter = ki < 1 ? `blur(${(1 - ki) * 20}px)` : "none";
+    icon.style.transform = `translateX(${km * -440}px) scale(${lerp(0.6, 1, ki) * lerp(1, 0.8, km)})`;
+    const h = $("#halo");
+    h.style.opacity = ki * (0.7 + 0.3 * Math.sin(t * 2));
+    h.style.transform = `translateX(${km * -440}px) scale(${lerp(0.5, 1, ki)})`;
+    const kw = outExpo(prog(t, 7.3, 8.3));
+    const word = $("#word2");
+    word.style.clipPath = `inset(-20% ${(1 - kw) * 100}% -20% 0)`;
+    word.style.transform = `translateX(${(1 - kw) * -40}px)`;
+    rise($("#tag2"), t, 8.1, 0.8, 24, 6);
+  }
+
+  // S3 stack: 10.6 – 15.6
+  {
+    const w = win(t, 10.6, 15.6, 0.3, 0.6);
+    show("s3", w, `translateY(${-w.out * 40}px)`);
+    $$("#s3 .not").forEach((el, i) => {
+      rise(el, t, 10.7 + i * 0.15, 0.7, 50, 10);
+      const ks = outExpo(prog(t, 11.7 + i * 0.22, 12.2 + i * 0.22));
+      el.querySelector(".strike").style.transform = `scaleX(${ks})`;
+      el.style.color = `rgba(236,233,226,${lerp(1, 0.32, inOut(prog(t, 12.5, 13.0)))})`;
+    });
+    rise($("#just"), t, 12.9, 0.9, 40, 10);
+  }
+
+  // S4 numbers: 15.6 – 22
+  {
+    const w = win(t, 15.6, 22, 0.3, 0.6);
+    show("s4", w, `translateY(${-w.out * 40}px)`);
+    rise($("#h4"), t, 15.7, 0.8, 30, 8);
+    $$("#s4 .stat").forEach((el, i) => {
+      const at = 16.2 + i * 0.3;
+      rise(el, t, at, 0.8, 50, 8);
+      const kc = outExpo(prog(t, at + 0.1, at + 1.6));
+      const s = el.querySelector("[data-to]");
+      const from = Number(s.dataset.from || 0), to = Number(s.dataset.to);
+      s.textContent = nf.format(Math.round(lerp(from, to, kc)));
+      el.querySelector(".bar").style.width = `${kc * 100}%`;
+    });
+    rise($("#foot4"), t, 18.4, 0.8, 16, 4);
+  }
+
+  // S5 product: 22 – 36.2
+  {
+    const w = win(t, 22, 36.2, 0.3, 0.6);
+    show("s5", w);
+    // Screenshot: tilts up into place, then lifts away.
+    const ke = outExpo(prog(t, 22.1, 23.6));
+    const kx = inOut(prog(t, 25.6, 26.3));
+    const shot = $("#shot");
+    shot.style.opacity = clamp(ke * 1.5) * (1 - kx);
+    shot.style.transform = `perspective(2400px) translateY(${(1 - ke) * 260 - kx * 120}px) rotateX(${(1 - ke) * 28}deg) scale(${lerp(0.86, 1, ke) - kx * 0.04})`;
+    shot.style.visibility = t < 26.4 ? "visible" : "hidden";
+    const ca = $("#cap5a");
+    rise(ca, t, 22.9, 0.8, 24, 6);
+    ca.style.opacity = Number(ca.style.opacity) * (1 - kx);
+
+    // Clips: each enters from below, plays sped up, and exits upward.
+    const clips = [
+      { id: "clip1", cap: "#cap5b", a: 26.0, b: 31.2, s0: 1.0, s1: 14.6 },
+      { id: "clip2", cap: "#cap5c", a: 31.0, b: 36.2, s0: 0.4, s1: 10.2 },
+    ];
+    for (const c of clips) {
+      const el = $("#" + c.id), cap = $(c.cap);
+      const ki = outExpo(prog(t, c.a, c.a + 1.0));
+      const ko = inOut(prog(t, c.b - 0.7, c.b));
+      el.style.visibility = cap.style.visibility = t > c.a - 0.1 && t < c.b ? "visible" : "hidden";
+      el.style.opacity = ki * (1 - ko);
+      el.style.transform = `translateY(${(1 - ki) * 120 - ko * 80}px) scale(${lerp(0.94, 1, ki)})`;
+      rise(cap, t, c.a + 0.15, 0.8, 24, 6);
+      cap.style.opacity = Number(cap.style.opacity) * (1 - ko);
+      if (t > c.a - 0.1 && t < c.b) {
+        const kp = prog(t, c.a + 0.3, c.b - 0.6);
+        await seek(videos[c.id], lerp(c.s0, c.s1, kp));
+      }
+    }
+  }
+
+  // S6 engines: 36.2 – 40.6
+  {
+    const w = win(t, 36.2, 40.6, 0.3, 0.6);
+    show("s6", w, `translateY(${-w.out * 40}px)`);
+    rise($("#h6"), t, 36.3, 0.8, 30, 8);
+    $$("#now .eng").forEach((el, i) => {
+      const k = rise(el, t, 36.7 + i * 0.2, 0.9, 40, 12);
+      el.style.transform += ` scale(${lerp(0.85, 1, k)})`;
+    });
+    $$("#soon > *").forEach((el, i) => rise(el, t, 37.9 + i * 0.12, 0.7, 20, 6));
+  }
+
+  // S7 CTA: 40.6 – 47
+  {
+    const w = win(t, 40.6, 47, 0.3, 0.01);
+    show("s7", w);
+    const ki = rise($("#icon7"), t, 40.7, 1.0, 30, 16);
+    $("#icon7").style.transform += ` scale(${lerp(0.7, 1, ki)})`;
+    const kw = outExpo(prog(t, 41.0, 42.0));
+    const word = $("#word7");
+    word.style.opacity = kw;
+    word.style.letterSpacing = `${lerp(0.04, -0.025, kw)}em`;
+    word.style.filter = kw < 1 ? `blur(${(1 - kw) * 12}px)` : "none";
+    rise($("#line7"), t, 41.8, 0.8, 24, 6);
+    $$("#chips .chip").forEach((el, i) => rise(el, t, 42.4 + i * 0.1, 0.7, 20, 4));
+    rise($("#url"), t, 43.2, 0.9, 30, 8);
+  }
+
+  $("#fade").style.opacity = inOut(prog(t, 46.2, 47));
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+};
+
+window.ready = (async () => {
+  await document.fonts.load('800 100px "Archivo"');
+  await document.fonts.ready;
+  await Promise.all([...document.images].map((i) => i.decode().catch(() => {})));
+  await Promise.all(Object.values(videos).map((v) => v.readyState >= 2 ? 0 : new Promise((r) => v.addEventListener("loadeddata", r, { once: true }))));
+  return DURATION;
+})();
+</script>
+</body>
+</html>
