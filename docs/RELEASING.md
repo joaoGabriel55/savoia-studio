@@ -23,6 +23,8 @@ Pull requests that change packaging build every installer, unsigned, as a check 
 
 Versions and release notes come from [Changesets](https://github.com/changesets/changesets); see [the ADR](./adr/202610101305-version-releases-with-changesets.md).
 
+Before merging the Release PR, `npm run release:check` shows the current version, the one about to be released, and each commit since the last tag with its guessed bump (chore, patch, minor or major, from its message and the files it touched). It exits 1 when `package.json`, `Cargo.toml` and `Cargo.lock` disagree, or when commits look bigger than the pending changesets, such as a fix or a feature with no changeset. The guess is a check, not the source: the changesets still decide the version.
+
 1. **In each PR users will notice,** run `npx changeset` (after `npm ci` once). Pick patch, minor or major and write one line for the changelog, then commit the generated `.changeset/*.md`. CI warns when a PR has none.
 2. **After merging to `main`,** the Changesets workflow opens or updates the **Release Savoia Studio** PR. It bumps `package.json`, `Cargo.toml` and `Cargo.lock` and writes `CHANGELOG.md`. Review the version and the notes.
 3. **Merge the Release PR.** The workflow tags `vX.Y.Z` and starts the release build (about 25 minutes).
